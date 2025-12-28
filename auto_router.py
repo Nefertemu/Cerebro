@@ -1,11 +1,9 @@
-import requests
-import paramiko
 import time
-import getpass
-import socket
+import paramiko
+import requests
 
 # importing data from config.py
-from config import SOURCES, ROUTER_IP, DEFAULT_USER, CHUNK_SIZE
+from config import SOURCES, ROUTER_IP, DEFAULT_USER, CHUNK_SIZE, VPN_INTERFACE, PASSWORD
 
 def get_clean_domains(url):
 
@@ -180,22 +178,13 @@ def main():
 
     if not selected_keys: return
 
-    # 2. ДАННЫЕ ПОЛЬЗОВАТЕЛЯ
-    try:
-        user_pass = user_pass = input(f"\nВведите пароль для {DEFAULT_USER}: ")
-        if not user_pass: return
-        user_interface = input("Имя интерфейса (VPN), куда заворачивать (напр. Wireguard0): ").strip()
-        if not user_interface: return
-    except KeyboardInterrupt:
-        return
-
     # 3. ПОДКЛЮЧЕНИЕ SSH
     print(f"\nСоединение с {ROUTER_IP}...")
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
     try:
-        client.connect(ROUTER_IP, username=DEFAULT_USER, password=user_pass, timeout=10)
+        client.connect(ROUTER_IP, username=DEFAULT_USER, password=PASSWORD, timeout=10)
         shell = client.invoke_shell()
         time.sleep(1)
         if shell.recv_ready(): shell.recv(4096)
@@ -209,7 +198,7 @@ def main():
     print(f"\n--- НАЧАЛО ОПЕРАЦИИ ({len(selected_keys)} задач) ---")
 
     for source_name in selected_keys:
-        process_source(source_name, SOURCES[source_name], shell, user_interface)
+        process_source(source_name, SOURCES[source_name], shell, VPN_INTERFACE)
 
     # 5. СОХРАНЕНИЕ НА РОУТЕРЕ
     print("\n[SYSTEM] Сохранение настроек (system configuration save)...")

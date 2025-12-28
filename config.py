@@ -2,16 +2,15 @@
 CHUNK_SIZE = 300
 ROUTER_IP = "192.168.1.1"
 DEFAULT_USER = "admin"
+VPN_INTERFACE = "Wireguard0"
+PASSWORD = "h6b-F@ss-aX$?J-Z!Ae"
 
 # --- catalog ---
 SOURCES = {
-    "Test": {
+    "test": {
         "prefix": "test",
         "list": [
-            "2ip.io",
-            "fast.com",
-            "speedtest.net",
-            "ookla.com",
+            "2ip.ru",
             "whoer.net"
         ]
     },
