@@ -8,10 +8,7 @@ import socket
 from config import SOURCES, ROUTER_IP, DEFAULT_USER, CHUNK_SIZE
 
 def get_clean_domains(url):
-    """
-    Скачивает список по URL, очищает от мусора и спецсимволов (*.),
-    возвращает чистый список доменов.
-    """
+
     print(f"    [WEB] Загрузка списка: {url}...")
 
     # Маскируемся под браузер, чтобы нас не заблокировали
