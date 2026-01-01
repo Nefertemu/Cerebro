@@ -1,8 +1,8 @@
 # --- router settings ---
 CHUNK_SIZE = 300
-ROUTER_IP = "192.168.1.1"
+ROUTER_IP = "suboku.netcraze.pro"
 DEFAULT_USER = "admin"
-VPN_INTERFACE = "Wireguard0"
+VPN_INTERFACE = "Wireguard2"
 PASSWORD = "h6b-F@ss-aX$?J-Z!Ae"
 
 # --- catalog ---

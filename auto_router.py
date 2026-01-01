@@ -72,7 +72,6 @@ def process_source(name, data, shell, interface):
 
     print(f"\n>>> Модуль: {name}")
 
-    # --- НОВАЯ ЛОГИКА ---
     # Проверяем: если в настройках есть 'list', берем его
     if 'list' in data:
         print(f"    [MODE] Локальный список (без скачивания)")
