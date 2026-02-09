@@ -204,6 +204,8 @@ def process_source(name, data, shell, interface):
     if not valid_domains and not subnet_list:
         print("    [ПУСТО] Нет валидных доменов или подсетей. Пропуск.")
         return
+    if subnet_list:
+        print(f"    [OK] Подсетей к добавлению: {len(subnet_list)}")
 
     combined = []
     seen = set()
