@@ -179,6 +179,55 @@ def process_domain_list(prefix, valid_domains, shell, interface):
         print("OK")
 
 
+def process_subnet_list(prefix, subnets, shell, interface):
+    if not subnets:
+        print("    [ПУСТО] Нет валидных подсетей или ошибка загрузки. Пропуск.")
+        return
+
+    count = len(subnets)
+    print(f"    [OK] Получено подсетей: {count}")
+
+    total_chunks = (count + CHUNK_SIZE - 1) // CHUNK_SIZE
+
+    for i in range(total_chunks):
+        chunk_num = i + 1
+        base = f"{safe_group_name(prefix)}-subnets"
+        group_name = base if total_chunks == 1 else f"{base}-{chunk_num}"
+
+        start = i * CHUNK_SIZE
+        end = start + CHUNK_SIZE
+        chunk = subnets[start:end]
+
+        print(f"    -> Отправка подсетей {chunk_num}/{total_chunks} в '{group_name}' ({len(chunk)} шт)... ", end='')
+
+        if not send_command(shell, f"no object-group network {group_name}", 0.05):
+            print("    [SSH] Сессия оборвалась. Останов.")
+            return
+        if not send_command(shell, f"object-group network {group_name}", 0.05):
+            print("    [SSH] Сессия оборвалась. Останов.")
+            return
+
+        cmd_buffer = ""
+        for subnet in chunk:
+            cmd_buffer += f"network-object {subnet}\n"
+
+        shell.send(cmd_buffer)
+
+        wait_time = 0.5 + (len(chunk) / 50.0)
+        time.sleep(wait_time)
+
+        if shell.recv_ready():
+            while shell.recv_ready():
+                shell.recv(4096)
+
+        route_cmd = f"ip route object-group {group_name} {interface} auto"
+        if not send_command(shell, route_cmd, 0.1):
+            print("    [SSH] Сессия оборвалась на маршрутизации. Останов.")
+            return
+
+        print("OK")
+
+
 def process_source(name, data, shell, interface):
     prefix = data['prefix']
 
@@ -204,17 +253,12 @@ def process_source(name, data, shell, interface):
     if not valid_domains and not subnet_list:
         print("    [ПУСТО] Нет валидных доменов или подсетей. Пропуск.")
         return
+
+    if valid_domains:
+        process_domain_list(prefix, valid_domains, shell, interface)
+
     if subnet_list:
-        print(f"    [OK] Подсетей к добавлению: {len(subnet_list)}")
-
-    combined = []
-    seen = set()
-    for item in valid_domains + subnet_list:
-        if item not in seen:
-            combined.append(item)
-            seen.add(item)
-
-    process_domain_list(prefix, combined, shell, interface)
+        process_subnet_list(prefix, subnet_list, shell, interface)
 
 
 def get_sorted_menu():
