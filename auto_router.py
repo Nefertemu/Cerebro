@@ -5,6 +5,16 @@ import requests
 # importing data from config.py
 from config import SOURCES, ROUTER_IP, DEFAULT_USER, CHUNK_SIZE, VPN_INTERFACE, PASSWORD
 
+import re
+
+def safe_group_name(name: str) -> str:
+    """Делает имя object-group безопасным для CLI (без пробелов и спецсимволов)."""
+    name = name.strip().lower()
+    name = name.replace(' ', '-')
+    name = re.sub(r'[^a-z0-9._-]+', '-', name)  # только безопасные символы
+    name = re.sub(r'-{2,}', '-', name).strip('-')
+    return name or "group"
+
 def get_clean_domains(url):
 
     print(f"    [WEB] Загрузка списка: {url}...")
@@ -59,13 +69,26 @@ def get_clean_domains(url):
 
 
 def send_command(shell, cmd, sleep_time=0.1):
-    """Отправляет команду в SSH консоль и ждет выполнения"""
-    shell.send(cmd + "\n")
+    """Отправляет команду в SSH-консоль и ждёт выполнения.
+
+    Возвращает True при успехе, False если канал закрыт/оборван.
+    """
+    try:
+        shell.send(cmd + "\n")
+    except Exception as e:
+        print(f"[SSH] Канал закрыт при отправке команды '{cmd}': {e}")
+        return False
+
     time.sleep(sleep_time)
-    if shell.recv_ready():
+
+    # Вычитываем доступный вывод, чтобы буфер не забивался
+    try:
         while shell.recv_ready():
             shell.recv(4096)
+    except Exception:
+        return False
 
+    return True
 
 def process_source(name, data, shell, interface):
     prefix = data['prefix']
@@ -99,7 +122,8 @@ def process_source(name, data, shell, interface):
 
     for i in range(total_chunks):
         chunk_num = i + 1
-        group_name = prefix if total_chunks == 1 else f"{prefix}-{chunk_num}"
+        base = safe_group_name(prefix)
+        group_name = base if total_chunks == 1 else f"{base}-{chunk_num}"
 
         start = i * CHUNK_SIZE
         end = start + CHUNK_SIZE
@@ -108,8 +132,12 @@ def process_source(name, data, shell, interface):
         print(f"    -> Отправка {chunk_num}/{total_chunks} в '{group_name}' ({len(chunk)} шт)... ", end='')
 
         # Удаляем старую группу и создаем новую
-        send_command(shell, f"no object-group fqdn {group_name}", 0.05)
-        send_command(shell, f"object-group fqdn {group_name}", 0.05)
+        if not send_command(shell, f"no object-group fqdn {group_name}", 0.05):
+            print("    [SSH] Сессия оборвалась. Останов.")
+            return
+        if not send_command(shell, f"object-group fqdn {group_name}", 0.05):
+            print("    [SSH] Сессия оборвалась. Останов.")
+            return
 
         # Формируем буфер команд
         cmd_buffer = ""
@@ -126,11 +154,11 @@ def process_source(name, data, shell, interface):
         if shell.recv_ready():
             while shell.recv_ready(): shell.recv(4096)
 
-        send_command(shell, "exit")
-
         # Настройка маршрутизации для этой группы
         route_cmd = f"dns-proxy route object-group {group_name} {interface} auto"
-        send_command(shell, route_cmd, 0.1)
+        if not send_command(shell, route_cmd, 0.1):
+            print("    [SSH] Сессия оборвалась на маршрутизации. Останов.")
+            return
 
         print("OK")
 
@@ -201,7 +229,9 @@ def main():
 
     # 5. СОХРАНЕНИЕ НА РОУТЕРЕ
     print("\n[SYSTEM] Сохранение настроек (system configuration save)...")
-    send_command(shell, "system configuration save", 5)
+    if not send_command(shell, "system configuration save", 5):
+        print("[SSH] Сессия оборвалась при сохранении конфигурации.")
+        return
 
     elapsed = round(time.time() - start_time, 1)
     print(f"\n=== ГОТОВО ({elapsed} сек) ===")
