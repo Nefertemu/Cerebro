@@ -24,7 +24,8 @@ SOURCES = {
     },
     "meta": {
         "prefix": "meta",
-        "url": "https://raw.githubusercontent.com/itdoginfo/allow-domains/refs/heads/main/Services/meta.lst"
+        "url": "https://raw.githubusercontent.com/itdoginfo/allow-domains/refs/heads/main/Services/meta.lst",
+        "subnets_url": "https://raw.githubusercontent.com/itdoginfo/allow-domains/refs/heads/main/Subnets/IPv4/meta.lst"
     },
     "youtube": {
         "prefix": "youtube",
@@ -32,7 +33,8 @@ SOURCES = {
     },
     "telegram": {
         "prefix": "telegram",
-        "url": "https://raw.githubusercontent.com/itdoginfo/allow-domains/refs/heads/main/Services/telegram.lst"
+        "url": "https://raw.githubusercontent.com/itdoginfo/allow-domains/refs/heads/main/Services/telegram.lst",
+        "subnets_url": "https://raw.githubusercontent.com/itdoginfo/allow-domains/refs/heads/main/Subnets/IPv4/telegram.lst"
     },
     "twitter": {
         "prefix": "twitter",
