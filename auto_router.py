@@ -68,6 +68,46 @@ def get_clean_domains(url):
     return clean_list
 
 
+def get_clean_subnets(url):
+    print(f"    [WEB] Загрузка списка подсетей: {url}...")
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+
+    try:
+        response = requests.get(url, headers=headers, timeout=20)
+
+        if response.status_code == 404:
+            print("    [ОШИБКА 404] Файл не найден.")
+            return []
+
+        response.raise_for_status()
+
+    except requests.exceptions.RequestException as e:
+        print(f"    [СБОЙ СЕТИ] {e}")
+        return []
+
+    content = response.text
+    lines = content.splitlines()
+    clean_list = []
+    seen = set()
+
+    for line in lines:
+        line = line.strip()
+
+        if not line or line.startswith('#'):
+            continue
+
+        subnet = line.split()[0]
+
+        if subnet not in seen:
+            clean_list.append(subnet)
+            seen.add(subnet)
+
+    return clean_list
+
+
 def send_command(shell, cmd, sleep_time=0.1):
     """Отправляет команду в SSH-консоль и ждёт выполнения.
 
@@ -90,26 +130,7 @@ def send_command(shell, cmd, sleep_time=0.1):
 
     return True
 
-def process_source(name, data, shell, interface):
-    prefix = data['prefix']
-
-    print(f"\n>>> Модуль: {name}")
-
-    # Проверяем: если в настройках есть 'list', берем его
-    if 'list' in data:
-        print(f"    [MODE] Локальный список (без скачивания)")
-        valid_domains = data['list']
-
-    # Если списка нет, ищем 'url' и скачиваем
-    elif 'url' in data:
-        url = data['url']
-        valid_domains = get_clean_domains(url)
-
-    else:
-        print("    [ОШИБКА] Не указан ни url, ни list.")
-        return
-    # --------------------
-
+def process_domain_list(prefix, valid_domains, shell, interface):
     if not valid_domains:
         print("    [ПУСТО] Нет валидных доменов или ошибка загрузки. Пропуск.")
         return
@@ -117,7 +138,6 @@ def process_source(name, data, shell, interface):
     count = len(valid_domains)
     print(f"    [OK] Получено чистых доменов: {count}")
 
-    # Разбивка на чанки (порции)
     total_chunks = (count + CHUNK_SIZE - 1) // CHUNK_SIZE
 
     for i in range(total_chunks):
@@ -131,7 +151,6 @@ def process_source(name, data, shell, interface):
 
         print(f"    -> Отправка {chunk_num}/{total_chunks} в '{group_name}' ({len(chunk)} шт)... ", end='')
 
-        # Удаляем старую группу и создаем новую
         if not send_command(shell, f"no object-group fqdn {group_name}", 0.05):
             print("    [SSH] Сессия оборвалась. Останов.")
             return
@@ -139,28 +158,103 @@ def process_source(name, data, shell, interface):
             print("    [SSH] Сессия оборвалась. Останов.")
             return
 
-        # Формируем буфер команд
         cmd_buffer = ""
         for d in chunk:
             cmd_buffer += f"include {d}\n"
 
         shell.send(cmd_buffer)
 
-        # Динамическая пауза: чем больше список, тем дольше ждем, чтобы роутер не захлебнулся
         wait_time = 0.5 + (len(chunk) / 50.0)
         time.sleep(wait_time)
 
-        # Очистка буфера вывода (чтобы не забивать память)
         if shell.recv_ready():
-            while shell.recv_ready(): shell.recv(4096)
+            while shell.recv_ready():
+                shell.recv(4096)
 
-        # Настройка маршрутизации для этой группы
         route_cmd = f"dns-proxy route object-group {group_name} {interface} auto"
         if not send_command(shell, route_cmd, 0.1):
             print("    [SSH] Сессия оборвалась на маршрутизации. Останов.")
             return
 
         print("OK")
+
+
+def process_subnet_list(prefix, subnets, shell, interface):
+    if not subnets:
+        print("    [ПУСТО] Нет валидных подсетей или ошибка загрузки. Пропуск.")
+        return
+
+    count = len(subnets)
+    print(f"    [OK] Получено подсетей: {count}")
+
+    total_chunks = (count + CHUNK_SIZE - 1) // CHUNK_SIZE
+
+    for i in range(total_chunks):
+        chunk_num = i + 1
+        base = f"{safe_group_name(prefix)}-subnets"
+        group_name = base if total_chunks == 1 else f"{base}-{chunk_num}"
+
+        start = i * CHUNK_SIZE
+        end = start + CHUNK_SIZE
+        chunk = subnets[start:end]
+
+        print(f"    -> Отправка подсетей {chunk_num}/{total_chunks} в '{group_name}' ({len(chunk)} шт)... ", end='')
+
+        if not send_command(shell, f"no object-group network {group_name}", 0.05):
+            print("    [SSH] Сессия оборвалась. Останов.")
+            return
+        if not send_command(shell, f"object-group network {group_name}", 0.05):
+            print("    [SSH] Сессия оборвалась. Останов.")
+            return
+
+        cmd_buffer = ""
+        for subnet in chunk:
+            cmd_buffer += f"network-object {subnet}\n"
+
+        shell.send(cmd_buffer)
+
+        wait_time = 0.5 + (len(chunk) / 50.0)
+        time.sleep(wait_time)
+
+        if shell.recv_ready():
+            while shell.recv_ready():
+                shell.recv(4096)
+
+        route_cmd = f"ip route object-group {group_name} {interface} auto"
+        if not send_command(shell, route_cmd, 0.1):
+            print("    [SSH] Сессия оборвалась на маршрутизации. Останов.")
+            return
+
+        print("OK")
+
+
+def process_source(name, data, shell, interface):
+    prefix = data['prefix']
+
+    print(f"\n>>> Модуль: {name}")
+
+    valid_domains = []
+    if 'list' in data:
+        print("    [MODE] Локальный список (без скачивания)")
+        valid_domains = data['list']
+    elif 'url' in data:
+        url = data['url']
+        valid_domains = get_clean_domains(url)
+    elif 'list' not in data and 'url' not in data:
+        print("    [ОШИБКА] Не указан ни url, ни list.")
+
+    if 'list' in data or 'url' in data:
+        process_domain_list(prefix, valid_domains, shell, interface)
+
+    subnet_list = []
+    if 'subnets' in data:
+        print("    [MODE] Локальный список подсетей (без скачивания)")
+        subnet_list = data['subnets']
+    elif 'subnets_url' in data:
+        subnet_list = get_clean_subnets(data['subnets_url'])
+
+    if 'subnets' in data or 'subnets_url' in data:
+        process_subnet_list(prefix, subnet_list, shell, interface)
 
 
 def get_sorted_menu():
