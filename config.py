@@ -1,9 +1,9 @@
 # --- router settings ---
 CHUNK_SIZE = 300
-ROUTER_IP = "suboku.crazedns.ru"
-DEFAULT_USER = "admin"
-VPN_INTERFACE = "Wireguard0"
-PASSWORD = "h6b-F@ss-aX$?J-Z!Ae"
+ROUTER_IP = "your router ip"
+DEFAULT_USER = "your router user"
+VPN_INTERFACE = "your vpn interface"
+PASSWORD = "your router password"
 
 # --- catalog ---
 SOURCES = {
